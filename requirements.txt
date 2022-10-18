@@ -1,0 +1,5 @@
+pyPDF2==2.11.1
+beautifulsoup4==4.11.1
+spacy==3.4.1
+trafilatura==1.4.0
+googletrans==3.1.0a0

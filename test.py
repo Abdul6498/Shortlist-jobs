@@ -1,10 +1,16 @@
 import glob
+import string
 import numpy as np
 from text_from_html import text_from_url
 from translate_en import translate_to_eng
 import pandas as pd
-from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
 from text_from_pdf import text_from_pdf
+import nltk
+from nltk.corpus import stopwords
+import matplotlib.pyplot as plt
+from wordcloud import WordCloud
+#nltk.download()
+
 PATH = "/home/abdul/Desktop/Job Application/module/"
 
 def vectorize(tokens, filtered_vocab):
@@ -23,78 +29,117 @@ def unique(sequence):
     return [x for x in sequence if not (x in seen or seen.add(x))]
 
 
-#create a list of stopwords.You can import stopwords from nltk too
-stopwords=["to","is","a", "for", "in", "the", "and", "of", "with", "all", "will", "be", "as", "by", "on"]
-#list of special characters.You can use regular expressions too
-special_char=[",",":"," ",";",".","?", "/"]
-
-url = 'https://www.stepstone.de/jobs--Senior-Software-Engineer-for-Middleware-C-Driver-Assistance-Systems-f-m-div-Berlin-Bosch-Gruppe--8741267-inline.html'
-linkedin_url = 'https://www.linkedin.com/in/abdulrehman6498/details/'
+linkedin_url = 'https://www.stepstone.de/jobs--Computer-Vision-Expert-f-m-div-Stuttgart-Bosch-Gruppe--7970290-inline.html'
 linkedin_data = ['projects/', 'experience/', 'skills/', 'honors/']
+
 def extract_data_from_linkedin(url, types):
     text = ""
     for ext in types:
         final_url = url + ext
-        print(final_url)
+
         text += str(text_from_url(final_url))
     return text
 
 def main(path, url, linkedin_url, linkedin_data):
+    '''This function takes in a path and a url and returns a list of 
+    words in a sentence'''
+
+    #create a list of stopwords.You can import stopwords from nltk too
+    #stopwords=["to","is","a", "for", "in", "the", "and", "of", "with", "all", "will", "be", "as", "by", "on"]
+    stop_words = stopwords.words('english')
+    #list of special characters.You can use regular expressions too
+    special_char=[",",":"," ",";",".","?", "/", ")", "(", "-", "{", "_", "}", "&", "!", "),"]
+
     files = sorted(glob.glob(path+"*.pdf"))
     personal_dox = ""
     for file in files:
-        personal_dox += str(text_from_pdf(file)) + " "
-    #personal_dox += extract_data_from_linkedin(linkedin_url,linkedin_data)    
-    #print(personal_dox)
+        personal_dox += str(text_from_pdf(file)) + "master's" + "master" +" "
+
     text = text_from_url(url)
     job_desc = str(translate_to_eng(text).text)
-        #print(eng.text)
-    
-    job_desc = job_desc.replace(",", "")
-    personal_dox = personal_dox.replace(",", "")
-    job_desc = job_desc.replace("/", "")
-    personal_dox = personal_dox.replace("/", "")
-
-    #convert them to lower case
+    for sp_char in special_char:
+        job_desc = job_desc.replace(sp_char, " ")
+        personal_dox = personal_dox.replace(sp_char, " ")
     job_desc=job_desc.lower()
     personal_dox=personal_dox.lower()
 
-    #split the sentences into tokens
     tokens1=job_desc.split()
     tokens2=personal_dox.split()
-
-    #print(tokens1)
-    #print(tokens2)
-
-    #create a vocabulary list
     vocab=unique(tokens1+tokens2)
-    #print(vocab)
-
-    #filter the vocabulary list
     filtered_vocab=[]
+
     for w in vocab: 
-        if w not in stopwords and w not in special_char: 
+        if w not in stop_words and w not in special_char: 
             filtered_vocab.append(w)
-    #print(filtered_vocab)
-    #convert sentences into vectords
+
     vector1=vectorize(tokens1, filtered_vocab)
-    #print(vector1)
     vector2=vectorize(tokens2, filtered_vocab)
-    #print(vector2)
-    lang = ["c++", "python", "capl"]
+
+    lang = ["c++", "python", "capl", "matlab", "linux", "qt", "ros", "simulink", "deep", "git", "camera", "sensor", "ai"]
+
     match = np.where((np.array(vector1)>0) & (np.array(vector2)>0), "green", "red")
+
     matching_words = []
+    high_scoring_words = []
     for i in range(len(match)):
         if match[i] == "green":
-            #print(filtered_vocab[i])
             matching_words.append(filtered_vocab[i])
             if filtered_vocab[i] == "stuttgart":
                 print("City = Stuttgart")
             if any(x in filtered_vocab[i] for x in lang):
                 contained = [x for x in lang if x in filtered_vocab[i]]
-                print(contained)
+                high_scoring_words.append(contained[0])
+                print(contained[0])
     #print(matching_words)
     pd.DataFrame(matching_words).to_csv("data.csv")
+    return matching_words, high_scoring_words
 
 if __name__ == '__main__':
-    main(PATH, url, linkedin_url, linkedin_data)
+    url = 'https://www.bosch.de/en/career/job/REF124429H-'
+
+    matching_words, high_scorings = main(PATH, url, linkedin_url, linkedin_data)
+    high_scorings = unique(high_scorings)
+    print(high_scorings)
+    print(len(matching_words))
+    cv_words = 550
+    num_skills = 20
+    high_scorings_factor = ((cv_words - len(matching_words))/num_skills)
+    print(high_scorings_factor)
+    prob_high = ((len(high_scorings)*high_scorings_factor)/cv_words)*100
+    prob_match = (len(matching_words)/cv_words)*100
+    prob = ((len(matching_words) + len(high_scorings)*high_scorings_factor)/cv_words) *100
+    print("Probability of matching_words: ", prob)
+
+    # Pie chart, where the slices will be ordered and plotted counter-clockwise:
+    labels = 'keywords', 'skills', 'chances', 'needs improvement'
+    sizes = [prob_match, prob_high, prob, 100-prob_match-prob_high-prob]
+    explode = (0, 0.1, 0, 0)  # only "explode" the 2nd slice (i.e. 'Hogs')
+
+    fig1, ax1 = plt.subplots(1)
+    ax1.pie(sizes, explode=explode, labels=labels, autopct='%1.1f%%',
+            shadow=True, startangle=90)
+    ax1.axis('equal')  # Equal aspect ratio ensures that pie is drawn as a circle.
+
+    fig1.show()
+
+    cloud_words = " "
+    for text in matching_words:
+        if text in high_scorings:
+            text = text +" "+ text + " " + text
+        cloud_words = cloud_words + text + " "
+    normal_word = r"(?:\w[\w']+)"
+    # 2+ consecutive punctuations, e.x. :)
+    ascii_art = r"(?:[{punctuation}][{punctuation}]+)".format(punctuation=string.punctuation)
+    # a single character that is not alpha_numeric or other ascii printable
+    emoji = r"(?:[^\s])(?<![\w{ascii_printable}])".format(ascii_printable=string.printable)
+    regexp = r"{normal_word}|{ascii_art}|{emoji}".format(normal_word=normal_word, ascii_art=ascii_art,
+                                                     emoji=emoji)
+    word_cloud = WordCloud(collocations = False, regexp=r'[a-zA-z\+]+', width=1080, height=920, relative_scaling=1.0, background_color = 'white').generate(cloud_words)
+    
+    #word_cloud.generate("c ++")
+    # Display the generated Word Cloud
+    word_fig = plt.figure(2)
+    plt.imshow(word_cloud, interpolation='bilinear')
+    plt.axis("off")
+    plt.show()
+    
